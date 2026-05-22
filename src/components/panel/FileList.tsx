@@ -21,7 +21,7 @@ function FileIcon({ entry }: { entry: FileEntry }) {
 }
 
 export function FileList({ side }: FileListProps) {
-  const getActiveTab = usePanelStore((s) => s.getActiveTab);
+  const tab = usePanelStore((s) => s[side].tabs[s[side].activeTabIndex]);
   const activeSide = usePanelStore((s) => s.activeSide);
   const setActiveSide = usePanelStore((s) => s.setActiveSide);
   const setCursorIndex = usePanelStore((s) => s.setCursorIndex);
@@ -29,7 +29,6 @@ export function FileList({ side }: FileListProps) {
   const loadDirectory = usePanelStore((s) => s.loadDirectory);
   const navigateUp = usePanelStore((s) => s.navigateUp);
 
-  const tab = getActiveTab(side);
   const refreshPanel = usePanelStore((s) => s.refreshPanel);
   const listRef = useRef<HTMLDivElement>(null);
   const isActive = activeSide === side;
@@ -41,7 +40,7 @@ export function FileList({ side }: FileListProps) {
     return tab.files.filter((f) =>
       f.name.toLowerCase().includes(tab.filter.toLowerCase())
     );
-  }, [tab?.files, tab?.filter]);
+  }, [tab]);
 
   const handleItemClick = useCallback(
     (index: number, e: React.MouseEvent) => {

@@ -18,10 +18,11 @@ export function Toolbar() {
   const navigateForward = usePanelStore((s) => s.navigateForward);
   const refreshPanel = usePanelStore((s) => s.refreshPanel);
   const loadDirectory = usePanelStore((s) => s.loadDirectory);
-  const getActiveTab = usePanelStore((s) => s.getActiveTab);
+  const tab = usePanelStore((s) => {
+    const panel = s[s.activeSide];
+    return panel.tabs[panel.activeTabIndex];
+  });
   const openDialog = useUIStore((s) => s.openDialog);
-
-  const tab = getActiveTab(activeSide);
   const canGoBack = tab && tab.historyIndex > 0;
   const canGoForward = tab && tab.historyIndex < tab.history.length - 1;
 

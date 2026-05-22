@@ -12,10 +12,9 @@ export function TabBar({ side }: TabBarProps) {
   const closeTab = usePanelStore((s) => s.closeTab);
   const addTab = usePanelStore((s) => s.addTab);
   const loadDirectory = usePanelStore((s) => s.loadDirectory);
-  const getActiveTab = usePanelStore((s) => s.getActiveTab);
+  const currentTab = usePanelStore((s) => s[side].tabs[s[side].activeTabIndex]);
 
   const handleAddTab = async () => {
-    const currentTab = getActiveTab(side);
     const path = currentTab?.currentPath || '/';
     addTab(side, path);
     await loadDirectory(side, path);

@@ -14,9 +14,8 @@ const columns: { key: SortColumn; label: string; width: string }[] = [
 ];
 
 export function FileListHeader({ side }: FileListHeaderProps) {
-  const getActiveTab = usePanelStore((s) => s.getActiveTab);
+  const tab = usePanelStore((s) => s[side].tabs[s[side].activeTabIndex]);
   const setSortColumn = usePanelStore((s) => s.setSortColumn);
-  const tab = getActiveTab(side);
 
   if (!tab) return null;
 

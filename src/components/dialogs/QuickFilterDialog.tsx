@@ -6,9 +6,10 @@ export function QuickFilterDialog() {
   const closeDialog = useUIStore((s) => s.closeDialog);
   const activeSide = usePanelStore((s) => s.activeSide);
   const setFilter = usePanelStore((s) => s.setFilter);
-  const getActiveTab = usePanelStore((s) => s.getActiveTab);
-
-  const tab = getActiveTab(activeSide);
+  const tab = usePanelStore((s) => {
+    const panel = s[s.activeSide];
+    return panel.tabs[panel.activeTabIndex];
+  });
   const [value, setValue] = useState(tab?.filter || '');
   const inputRef = useRef<HTMLInputElement>(null);
 

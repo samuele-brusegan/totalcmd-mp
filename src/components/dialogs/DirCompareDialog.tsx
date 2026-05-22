@@ -52,11 +52,9 @@ function compareDirectories(leftFiles: FileEntry[], rightFiles: FileEntry[]): Di
 
 export function DirCompareDialog() {
   const closeDialog = useUIStore((s) => s.closeDialog);
-  const getActiveTab = usePanelStore((s) => s.getActiveTab);
+  const leftTab = usePanelStore((s) => s.left.tabs[s.left.activeTabIndex]);
+  const rightTab = usePanelStore((s) => s.right.tabs[s.right.activeTabIndex]);
   const [showSame, setShowSame] = useState(false);
-
-  const leftTab = getActiveTab('left');
-  const rightTab = getActiveTab('right');
 
   const diff = useMemo(() => {
     if (leftTab && rightTab) {

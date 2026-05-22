@@ -8,10 +8,11 @@ import type { FileEntry } from '../../types';
 export function SearchDialog() {
   const closeDialog = useUIStore((s) => s.closeDialog);
   const activeSide = usePanelStore((s) => s.activeSide);
-  const getActiveTab = usePanelStore((s) => s.getActiveTab);
+  const tab = usePanelStore((s) => {
+    const panel = s[s.activeSide];
+    return panel.tabs[panel.activeTabIndex];
+  });
   const loadDirectory = usePanelStore((s) => s.loadDirectory);
-
-  const tab = getActiveTab(activeSide);
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<FileEntry[]>([]);
   const [searching, setSearching] = useState(false);

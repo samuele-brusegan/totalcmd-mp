@@ -2,10 +2,10 @@ import { usePanelStore } from '../../stores/panelStore';
 import { formatFileSize } from '../../utils/formatters';
 
 export function StatusBar() {
-  const activeSide = usePanelStore((s) => s.activeSide);
-  const getActiveTab = usePanelStore((s) => s.getActiveTab);
-
-  const tab = getActiveTab(activeSide);
+  const tab = usePanelStore((s) => {
+    const panel = s[s.activeSide];
+    return panel.tabs[panel.activeTabIndex];
+  });
   if (!tab) return null;
 
   const totalFiles = tab.files.filter((f) => !f.isDirectory).length;

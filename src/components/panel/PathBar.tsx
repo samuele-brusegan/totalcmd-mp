@@ -8,9 +8,8 @@ interface PathBarProps {
 }
 
 export function PathBar({ side }: PathBarProps) {
-  const getActiveTab = usePanelStore((s) => s.getActiveTab);
+  const tab = usePanelStore((s) => s[side].tabs[s[side].activeTabIndex]);
   const loadDirectory = usePanelStore((s) => s.loadDirectory);
-  const tab = getActiveTab(side);
 
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState('');

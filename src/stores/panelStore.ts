@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { PanelState, PanelTab, PanelSide, SortColumn, SortDirection, FileEntry } from '../types';
 import { listLocalDir, getHomeDir } from '../services/localFs';
+import { remoteListDir } from '../services/connections';
 
 function createDefaultTab(path: string): PanelTab {
   return {
@@ -44,6 +45,7 @@ interface PanelStore {
   setFilter: (side: PanelSide, filter: string) => void;
 
   addTab: (side: PanelSide, path: string) => void;
+  openRemoteTab: (side: PanelSide, connectionId: string, label: string, remotePath: string) => void;
   closeTab: (side: PanelSide, tabIndex: number) => void;
   setActiveTab: (side: PanelSide, tabIndex: number) => void;
 
@@ -120,7 +122,11 @@ export const usePanelStore = create<PanelStore>((set, get) => ({
     set((state) => updateTab(state, side, () => ({ loading: true, error: null })));
 
     try {
-      const files = await listLocalDir(path);
+      const tab = get().getActiveTab(side);
+      const files = tab?.isRemote && tab.connectionId
+        ? await remoteListDir(tab.connectionId, path)
+        : await listLocalDir(path);
+
       set((state) => {
         const panel = state[side];
         const activeTab = panel.tabs[panel.activeTabIndex];
@@ -157,7 +163,9 @@ export const usePanelStore = create<PanelStore>((set, get) => ({
       const path = tab.currentPath;
       set((state) => updateTab(state, side, () => ({ loading: true, error: null })));
       try {
-        const files = await listLocalDir(path);
+        const files = tab.isRemote && tab.connectionId
+          ? await remoteListDir(tab.connectionId, path)
+          : await listLocalDir(path);
         set((state) => {
           const activeTab = get().getActiveTab(side);
           return updateTab(state, side, () => ({
@@ -273,6 +281,37 @@ export const usePanelStore = create<PanelStore>((set, get) => ({
         },
       };
     }),
+
+  openRemoteTab: (side, connectionId, label, remotePath) => {
+    const newTab: PanelTab = {
+      id: crypto.randomUUID(),
+      label: `[${label}]`,
+      currentPath: remotePath,
+      files: [],
+      selectedFiles: new Set(),
+      cursorIndex: 0,
+      sortColumn: 'name',
+      sortDirection: 'asc',
+      history: [remotePath],
+      historyIndex: 0,
+      filter: '',
+      loading: false,
+      error: null,
+      connectionId,
+      isRemote: true,
+    };
+    set((state) => {
+      const panel = state[side];
+      return {
+        [side]: {
+          ...panel,
+          tabs: [...panel.tabs, newTab],
+          activeTabIndex: panel.tabs.length,
+        },
+      };
+    });
+    get().loadDirectory(side, remotePath);
+  },
 
   closeTab: (side, tabIndex) =>
     set((state) => {

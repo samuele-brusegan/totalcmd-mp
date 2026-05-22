@@ -29,3 +29,8 @@ chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1", features = ["v4"] }
 dirs = "6"
 walkdir = "2"
+suppaftp = { version = "6", features = ["native-tls"] }
+ssh2 = "0.9"
+keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service"] }
+native-tls = "0.2"
+shellexpand = "3"

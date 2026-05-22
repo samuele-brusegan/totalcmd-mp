@@ -4,8 +4,11 @@ import {
   ArrowUp,
   Home,
   RefreshCw,
+  Globe,
+  Search,
 } from 'lucide-react';
 import { usePanelStore } from '../../stores/panelStore';
+import { useUIStore } from '../../stores/uiStore';
 import { getHomeDir } from '../../services/localFs';
 
 export function Toolbar() {
@@ -16,6 +19,7 @@ export function Toolbar() {
   const refreshPanel = usePanelStore((s) => s.refreshPanel);
   const loadDirectory = usePanelStore((s) => s.loadDirectory);
   const getActiveTab = usePanelStore((s) => s.getActiveTab);
+  const openDialog = useUIStore((s) => s.openDialog);
 
   const tab = getActiveTab(activeSide);
   const canGoBack = tab && tab.historyIndex > 0;
@@ -53,6 +57,18 @@ export function Toolbar() {
       icon: RefreshCw,
       label: 'Refresh',
       action: () => refreshPanel(activeSide),
+      disabled: false,
+    },
+    {
+      icon: Search,
+      label: 'Search (Ctrl+F)',
+      action: () => openDialog('search'),
+      disabled: false,
+    },
+    {
+      icon: Globe,
+      label: 'FTP/SFTP (Ctrl+P)',
+      action: () => openDialog('connection-manager'),
       disabled: false,
     },
   ];

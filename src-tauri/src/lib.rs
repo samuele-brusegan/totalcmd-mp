@@ -28,6 +28,18 @@ pub fn run() {
             commands::local_fs::move_items,
             commands::local_fs::get_drives,
             commands::local_fs::read_file_text,
+            commands::local_fs::search_files,
+            commands::connections::get_connections,
+            commands::connections::save_connection,
+            commands::connections::update_connection,
+            commands::connections::delete_connection,
+            commands::remote_fs::remote_list_dir,
+            commands::remote_fs::remote_download,
+            commands::remote_fs::remote_upload,
+            commands::remote_fs::remote_mkdir,
+            commands::remote_fs::remote_delete,
+            commands::remote_fs::remote_rename,
+            commands::remote_fs::test_connection,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

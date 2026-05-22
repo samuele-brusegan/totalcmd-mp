@@ -8,6 +8,13 @@ import { Panel } from './components/panel/Panel';
 import { MkDirDialog } from './components/dialogs/MkDirDialog';
 import { RenameDialog } from './components/dialogs/RenameDialog';
 import { DeleteConfirmDialog } from './components/dialogs/DeleteConfirmDialog';
+import { QuickFilterDialog } from './components/dialogs/QuickFilterDialog';
+import { SearchDialog } from './components/dialogs/SearchDialog';
+import { ConnectionManagerDialog } from './components/dialogs/ConnectionManagerDialog';
+import { DriveSelector } from './components/dialogs/DriveSelector';
+import { QuickConnectDialog } from './components/dialogs/QuickConnectDialog';
+import { FileViewerDialog } from './components/dialogs/FileViewerDialog';
+import { TransferPanel } from './components/layout/TransferPanel';
 import { usePanelStore } from './stores/panelStore';
 import { useUIStore } from './stores/uiStore';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
@@ -22,6 +29,18 @@ function DialogManager() {
       return <RenameDialog />;
     case 'delete-confirm':
       return <DeleteConfirmDialog />;
+    case 'quick-filter':
+      return <QuickFilterDialog />;
+    case 'search':
+      return <SearchDialog />;
+    case 'connection-manager':
+      return <ConnectionManagerDialog />;
+    case 'drive-selector':
+      return <DriveSelector />;
+    case 'quick-connect':
+      return <QuickConnectDialog />;
+    case 'file-viewer':
+      return <FileViewerDialog />;
     default:
       return null;
   }
@@ -55,6 +74,7 @@ export default function App() {
         </PanelGroup>
       </div>
 
+      <TransferPanel />
       <StatusBar />
       <FunctionKeyBar />
 

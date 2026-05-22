@@ -61,6 +61,20 @@ export function useKeyboardShortcuts() {
         return;
       }
 
+      // Ctrl+F - search files
+      if (e.key === 'f' && e.ctrlKey) {
+        e.preventDefault();
+        openDialog('search');
+        return;
+      }
+
+      // Ctrl+P - connection manager
+      if (e.key === 'p' && e.ctrlKey) {
+        e.preventDefault();
+        openDialog('connection-manager');
+        return;
+      }
+
       // Ctrl+L - focus path bar (handled by PathBar)
       // Num * - invert selection
       if (e.key === '*') {
@@ -69,11 +83,36 @@ export function useKeyboardShortcuts() {
         return;
       }
 
+      // Alt+F1 / Alt+F2 - drive selector
+      if (e.key === 'F1' && e.altKey) {
+        e.preventDefault();
+        openDialog('drive-selector', { side: 'left' });
+        return;
+      }
+      if (e.key === 'F2' && e.altKey) {
+        e.preventDefault();
+        openDialog('drive-selector', { side: 'right' });
+        return;
+      }
+
       // Function keys
       switch (e.key) {
         case 'F2':
           e.preventDefault();
           refreshPanel(activeSide);
+          break;
+
+        case 'F3':
+          e.preventDefault();
+          {
+            const tab = getActiveTab(activeSide);
+            if (tab) {
+              const file = tab.files[tab.cursorIndex];
+              if (file && !file.isDirectory) {
+                openDialog('file-viewer', { path: file.path });
+              }
+            }
+          }
           break;
 
         case 'F5':

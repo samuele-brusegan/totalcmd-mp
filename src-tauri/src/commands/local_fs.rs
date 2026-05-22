@@ -45,3 +45,8 @@ pub fn get_drives() -> Result<Vec<DriveInfo>, String> {
 pub fn read_file_text(path: String, encoding: Option<String>) -> Result<String, String> {
     fs_service::read_file_text(&path, encoding)
 }
+
+#[tauri::command]
+pub fn search_files(start_path: String, pattern: String) -> Result<Vec<FileEntry>, String> {
+    fs_service::search_files(&start_path, &pattern)
+}

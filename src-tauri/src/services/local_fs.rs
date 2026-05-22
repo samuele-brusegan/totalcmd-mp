@@ -2,6 +2,7 @@ use crate::models::{DriveInfo, FileEntry};
 use std::fs;
 use std::path::Path;
 use std::time::UNIX_EPOCH;
+use walkdir::WalkDir;
 
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
@@ -300,4 +301,125 @@ fn format_unix_permissions(mode: u32) -> String {
         perms.push(if mode & mask != 0 { ch } else { '-' });
     }
     perms
+}
+
+pub fn search_files(start_path: &str, pattern: &str) -> Result<Vec<FileEntry>, String> {
+    let path = Path::new(start_path);
+    if !path.exists() {
+        return Err(format!("Path does not exist: {}", start_path));
+    }
+
+    let pattern_lower = pattern.to_lowercase();
+    let is_glob = pattern.contains('*') || pattern.contains('?');
+    let mut results = Vec::new();
+    const MAX_RESULTS: usize = 500;
+
+    for entry in WalkDir::new(path)
+        .min_depth(1)
+        .max_depth(10)
+        .into_iter()
+        .filter_map(|e| e.ok())
+    {
+        let name = entry.file_name().to_string_lossy().to_lowercase();
+        let matches = if is_glob {
+            glob_match(&pattern_lower, &name)
+        } else {
+            name.contains(&pattern_lower)
+        };
+
+        if matches {
+            let entry_path = entry.path();
+            if let Ok(meta) = entry.metadata() {
+                let file_entry = build_file_entry_from_path(entry_path, &meta);
+                results.push(file_entry);
+                if results.len() >= MAX_RESULTS {
+                    break;
+                }
+            }
+        }
+    }
+
+    Ok(results)
+}
+
+fn glob_match(pattern: &str, name: &str) -> bool {
+    let pat_chars: Vec<char> = pattern.chars().collect();
+    let name_chars: Vec<char> = name.chars().collect();
+    glob_match_rec(&pat_chars, 0, &name_chars, 0)
+}
+
+fn glob_match_rec(pat: &[char], pi: usize, name: &[char], ni: usize) -> bool {
+    if pi == pat.len() {
+        return ni == name.len();
+    }
+    match pat[pi] {
+        '*' => {
+            for i in ni..=name.len() {
+                if glob_match_rec(pat, pi + 1, name, i) {
+                    return true;
+                }
+            }
+            false
+        }
+        '?' => {
+            if ni < name.len() {
+                glob_match_rec(pat, pi + 1, name, ni + 1)
+            } else {
+                false
+            }
+        }
+        c => {
+            if ni < name.len() && name[ni] == c {
+                glob_match_rec(pat, pi + 1, name, ni + 1)
+            } else {
+                false
+            }
+        }
+    }
+}
+
+fn build_file_entry_from_path(path: &Path, meta: &fs::Metadata) -> FileEntry {
+    let name = path.file_name().unwrap_or_default().to_string_lossy().to_string();
+    let is_directory = meta.is_dir();
+    let extension = if is_directory {
+        None
+    } else {
+        path.extension().map(|e| e.to_string_lossy().to_string())
+    };
+    let size = if is_directory { 0 } else { meta.len() };
+    let modified = meta
+        .modified()
+        .ok()
+        .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+        .map(|d| {
+            chrono::DateTime::from_timestamp(d.as_secs() as i64, d.subsec_nanos())
+                .map(|dt| dt.to_rfc3339())
+                .unwrap_or_default()
+        });
+    let created = meta
+        .created()
+        .ok()
+        .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+        .map(|d| {
+            chrono::DateTime::from_timestamp(d.as_secs() as i64, d.subsec_nanos())
+                .map(|dt| dt.to_rfc3339())
+                .unwrap_or_default()
+        });
+
+    #[cfg(unix)]
+    let permissions = Some(format_unix_permissions(meta.permissions().mode()));
+    #[cfg(not(unix))]
+    let permissions = None;
+
+    FileEntry {
+        name,
+        path: path.to_string_lossy().to_string(),
+        is_directory,
+        is_symlink: meta.is_symlink(),
+        size,
+        modified,
+        created,
+        extension,
+        permissions,
+    }
 }

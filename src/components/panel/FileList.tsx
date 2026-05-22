@@ -1,7 +1,8 @@
-import { useCallback, useRef, useEffect, useMemo } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { Folder, File, FileArchive, Link2, Loader2 } from 'lucide-react';
 import { usePanelStore } from '../../stores/panelStore';
 import { formatFileSize, formatDate, getFileTypeClass } from '../../utils/formatters';
+import { copyItems } from '../../services/localFs';
 import type { PanelSide, FileEntry } from '../../types';
 
 interface FileListProps {
@@ -29,8 +30,10 @@ export function FileList({ side }: FileListProps) {
   const navigateUp = usePanelStore((s) => s.navigateUp);
 
   const tab = getActiveTab(side);
+  const refreshPanel = usePanelStore((s) => s.refreshPanel);
   const listRef = useRef<HTMLDivElement>(null);
   const isActive = activeSide === side;
+  const [dragOver, setDragOver] = useState(false);
 
   const filteredFiles = useMemo(() => {
     if (!tab) return [];
@@ -142,6 +145,46 @@ export function FileList({ side }: FileListProps) {
     cursorEl?.scrollIntoView({ block: 'nearest' });
   }, [tab?.cursorIndex, tab]);
 
+  const handleDragStart = useCallback(
+    (e: React.DragEvent, file: FileEntry) => {
+      const paths = tab?.selectedFiles.size
+        ? Array.from(tab.selectedFiles)
+        : [file.path];
+      e.dataTransfer.setData('application/json', JSON.stringify({ paths, sourceSide: side }));
+      e.dataTransfer.effectAllowed = 'copyMove';
+    },
+    [tab, side]
+  );
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+    setDragOver(true);
+  }, []);
+
+  const handleDragLeave = useCallback(() => {
+    setDragOver(false);
+  }, []);
+
+  const handleDrop = useCallback(
+    async (e: React.DragEvent) => {
+      e.preventDefault();
+      setDragOver(false);
+      const data = e.dataTransfer.getData('application/json');
+      if (!data || !tab) return;
+
+      try {
+        const { paths, sourceSide } = JSON.parse(data) as { paths: string[]; sourceSide: PanelSide };
+        if (sourceSide === side) return;
+        await copyItems(paths, tab.currentPath);
+        await refreshPanel(side);
+      } catch (err) {
+        console.error('Drop copy failed:', err);
+      }
+    },
+    [tab, side, refreshPanel]
+  );
+
   if (!tab) return null;
 
   if (tab.loading) {
@@ -166,7 +209,10 @@ export function FileList({ side }: FileListProps) {
       tabIndex={0}
       onKeyDown={handleKeyDown}
       onClick={() => { if (!isActive) setActiveSide(side); }}
-      className={`flex-1 overflow-y-auto outline-none ${isActive ? '' : 'opacity-80'}`}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+      className={`flex-1 overflow-y-auto outline-none ${isActive ? '' : 'opacity-80'} ${dragOver ? 'ring-2 ring-inset ring-[var(--color-accent)]/50' : ''}`}
     >
       {/* Parent directory entry */}
       <div
@@ -191,6 +237,8 @@ export function FileList({ side }: FileListProps) {
           <div
             key={file.path}
             data-index={index}
+            draggable
+            onDragStart={(e) => handleDragStart(e, file)}
             onClick={(e) => handleItemClick(index, e)}
             onDoubleClick={() => handleItemDoubleClick(index)}
             className={`flex items-center h-6 px-2 cursor-pointer text-xs ${

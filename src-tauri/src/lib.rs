@@ -29,6 +29,7 @@ pub fn run() {
             commands::local_fs::get_drives,
             commands::local_fs::read_file_text,
             commands::local_fs::search_files,
+            commands::local_fs::chmod_local,
             commands::connections::get_connections,
             commands::connections::save_connection,
             commands::connections::update_connection,
@@ -39,6 +40,7 @@ pub fn run() {
             commands::remote_fs::remote_mkdir,
             commands::remote_fs::remote_delete,
             commands::remote_fs::remote_rename,
+            commands::remote_fs::remote_chmod,
             commands::remote_fs::test_connection,
         ])
         .run(tauri::generate_context!())

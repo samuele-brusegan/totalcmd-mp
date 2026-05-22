@@ -75,6 +75,23 @@ export function useKeyboardShortcuts() {
         return;
       }
 
+      // Ctrl+Q - quick connect
+      if (e.key === 'q' && e.ctrlKey) {
+        e.preventDefault();
+        openDialog('quick-connect');
+        return;
+      }
+
+      // Ctrl+M - multi rename
+      if (e.key === 'm' && e.ctrlKey) {
+        e.preventDefault();
+        const tab = getActiveTab(activeSide);
+        if (tab && tab.selectedFiles.size > 0) {
+          openDialog('multi-rename', { paths: Array.from(tab.selectedFiles) });
+        }
+        return;
+      }
+
       // Ctrl+L - focus path bar (handled by PathBar)
       // Num * - invert selection
       if (e.key === '*') {
@@ -97,6 +114,11 @@ export function useKeyboardShortcuts() {
 
       // Function keys
       switch (e.key) {
+        case 'F1':
+          e.preventDefault();
+          openDialog('help');
+          break;
+
         case 'F2':
           e.preventDefault();
           refreshPanel(activeSide);

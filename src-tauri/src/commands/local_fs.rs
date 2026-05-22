@@ -50,3 +50,18 @@ pub fn read_file_text(path: String, encoding: Option<String>) -> Result<String, 
 pub fn search_files(start_path: String, pattern: String) -> Result<Vec<FileEntry>, String> {
     fs_service::search_files(&start_path, &pattern)
 }
+
+#[cfg(unix)]
+#[tauri::command]
+pub fn chmod_local(path: String, mode: u32) -> Result<(), String> {
+    use std::os::unix::fs::PermissionsExt;
+    let perm = std::fs::Permissions::from_mode(mode);
+    std::fs::set_permissions(&path, perm)
+        .map_err(|e| format!("chmod failed: {}", e))
+}
+
+#[cfg(not(unix))]
+#[tauri::command]
+pub fn chmod_local(_path: String, _mode: u32) -> Result<(), String> {
+    Err("chmod is only supported on Unix systems".to_string())
+}

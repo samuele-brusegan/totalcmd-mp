@@ -63,9 +63,19 @@ export function FunctionKeyBar() {
     });
   };
 
+  const handleView = () => {
+    const tab = getActiveTab(activeSide);
+    if (tab) {
+      const file = tab.files[tab.cursorIndex];
+      if (file && !file.isDirectory) {
+        openDialog('file-viewer', { path: file.path });
+      }
+    }
+  };
+
   const fnKeys: FnKey[] = [
-    { key: 'F3', label: 'View', action: () => {} },
-    { key: 'F4', label: 'Edit', action: () => {} },
+    { key: 'F3', label: 'View', action: handleView },
+    { key: 'F4', label: 'Edit', action: handleView },
     { key: 'F5', label: 'Copy', action: handleCopy },
     { key: 'F6', label: 'Move', action: handleMove },
     { key: 'F7', label: 'MkDir', action: () => openDialog('mkdir') },

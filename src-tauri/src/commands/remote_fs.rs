@@ -148,6 +148,20 @@ pub fn remote_rename(connection_id: String, from: String, to: String) -> Result<
 }
 
 #[tauri::command]
+pub fn remote_chmod(connection_id: String, path: String, mode: u32) -> Result<(), String> {
+    let conn = get_connection_with_password(&connection_id)?;
+    match conn.protocol {
+        Protocol::Sftp => {
+            let client = SftpClient::connect(&conn)?;
+            let result = client.chmod(&path, mode);
+            client.disconnect().ok();
+            result
+        }
+        Protocol::Ftp => Err("chmod is not supported over FTP".to_string()),
+    }
+}
+
+#[tauri::command]
 pub fn test_connection(connection: Connection) -> Result<String, String> {
     match connection.protocol {
         Protocol::Ftp => {

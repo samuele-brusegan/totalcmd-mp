@@ -14,6 +14,11 @@ import { ConnectionManagerDialog } from './components/dialogs/ConnectionManagerD
 import { DriveSelector } from './components/dialogs/DriveSelector';
 import { QuickConnectDialog } from './components/dialogs/QuickConnectDialog';
 import { FileViewerDialog } from './components/dialogs/FileViewerDialog';
+import { ChmodDialog } from './components/dialogs/ChmodDialog';
+import { SettingsDialog } from './components/dialogs/SettingsDialog';
+import { HelpDialog } from './components/dialogs/HelpDialog';
+import { MultiRenameDialog } from './components/dialogs/MultiRenameDialog';
+import { DirCompareDialog } from './components/dialogs/DirCompareDialog';
 import { TransferPanel } from './components/layout/TransferPanel';
 import { usePanelStore } from './stores/panelStore';
 import { useUIStore } from './stores/uiStore';
@@ -41,6 +46,16 @@ function DialogManager() {
       return <QuickConnectDialog />;
     case 'file-viewer':
       return <FileViewerDialog />;
+    case 'chmod':
+      return <ChmodDialog />;
+    case 'settings':
+      return <SettingsDialog />;
+    case 'help':
+      return <HelpDialog />;
+    case 'multi-rename':
+      return <MultiRenameDialog />;
+    case 'dir-compare':
+      return <DirCompareDialog />;
     default:
       return null;
   }

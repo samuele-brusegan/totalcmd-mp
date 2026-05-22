@@ -192,6 +192,24 @@ impl SftpClient {
             .map_err(|e| format!("SFTP rename failed: {}", e))
     }
 
+    pub fn chmod(&self, path: &str, mode: u32) -> Result<(), String> {
+        let sftp = self.session.sftp()
+            .map_err(|e| format!("SFTP subsystem failed: {}", e))?;
+        let mut stat = sftp.stat(Path::new(path))
+            .map_err(|e| format!("SFTP stat failed: {}", e))?;
+        stat.perm = Some(mode);
+        sftp.setstat(Path::new(path), stat)
+            .map_err(|e| format!("SFTP chmod failed: {}", e))
+    }
+
+    pub fn stat(&self, path: &str) -> Result<(u64, Option<u32>), String> {
+        let sftp = self.session.sftp()
+            .map_err(|e| format!("SFTP subsystem failed: {}", e))?;
+        let stat = sftp.stat(Path::new(path))
+            .map_err(|e| format!("SFTP stat failed: {}", e))?;
+        Ok((stat.size.unwrap_or(0), stat.perm))
+    }
+
     pub fn disconnect(self) -> Result<(), String> {
         self.session.disconnect(None, "bye", None)
             .map_err(|e| format!("SSH disconnect failed: {}", e))

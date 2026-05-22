@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-type DialogType = 'mkdir' | 'rename' | 'delete-confirm' | 'quick-filter' | 'search' | 'connection-manager' | 'drive-selector' | 'quick-connect' | 'file-viewer' | null;
+type DialogType = 'mkdir' | 'rename' | 'delete-confirm' | 'quick-filter' | 'search' | 'connection-manager' | 'drive-selector' | 'quick-connect' | 'file-viewer' | 'chmod' | 'settings' | 'help' | 'multi-rename' | 'dir-compare' | null;
 type Theme = 'dark' | 'light';
 
 interface UIStore {

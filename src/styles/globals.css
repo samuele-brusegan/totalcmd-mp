@@ -39,6 +39,21 @@
     user-select: none;
   }
 
+  html {
+    color-scheme: dark;
+  }
+
+  select,
+  option {
+    background-color: var(--color-bg-primary);
+    color: var(--color-text-primary);
+  }
+
+  select option {
+    background-color: var(--color-bg-secondary);
+    color: var(--color-text-primary);
+  }
+
   ::-webkit-scrollbar {
     width: 8px;
     height: 8px;

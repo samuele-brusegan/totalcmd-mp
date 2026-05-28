@@ -1,8 +1,9 @@
 use crate::models::{Connection, FileEntry};
 use ssh2::Session;
 use std::io::{Read, Write};
-use std::net::TcpStream;
+use std::net::{SocketAddr, TcpStream, ToSocketAddrs};
 use std::path::Path;
+use std::time::Duration;
 
 pub struct SftpClient {
     session: Session,
@@ -10,9 +11,36 @@ pub struct SftpClient {
 
 impl SftpClient {
     pub fn connect(conn: &Connection) -> Result<Self, String> {
-        let addr = format!("{}:{}", conn.host, conn.port);
-        let tcp = TcpStream::connect(&addr)
-            .map_err(|e| format!("SFTP TCP connect failed: {}", e))?;
+        // Resolve and prefer IPv4 to avoid `EADDRNOTAVAIL` on networks
+        // without routable IPv6.
+        let raw: Vec<SocketAddr> = (conn.host.as_str(), conn.port)
+            .to_socket_addrs()
+            .map_err(|e| format!("DNS resolve failed for {}:{}: {}", conn.host, conn.port, e))?
+            .collect();
+        if raw.is_empty() {
+            return Err(format!("No addresses for {}", conn.host));
+        }
+        let mut addrs: Vec<SocketAddr> =
+            raw.iter().filter(|a| a.is_ipv4()).cloned().collect();
+        addrs.extend(raw.iter().filter(|a| a.is_ipv6()).cloned());
+
+        let mut tcp_opt: Option<TcpStream> = None;
+        let mut last_err: Option<String> = None;
+        for addr in &addrs {
+            match TcpStream::connect_timeout(addr, Duration::from_secs(15)) {
+                Ok(s) => {
+                    tcp_opt = Some(s);
+                    break;
+                }
+                Err(e) => last_err = Some(format!("{} → {}", addr, e)),
+            }
+        }
+        let tcp = tcp_opt.ok_or_else(|| {
+            format!(
+                "SFTP TCP connect failed: {}",
+                last_err.unwrap_or_else(|| "no candidates".into())
+            )
+        })?;
 
         let mut session = Session::new()
             .map_err(|e| format!("SSH session creation failed: {}", e))?;
@@ -200,14 +228,6 @@ impl SftpClient {
         stat.perm = Some(mode);
         sftp.setstat(Path::new(path), stat)
             .map_err(|e| format!("SFTP chmod failed: {}", e))
-    }
-
-    pub fn stat(&self, path: &str) -> Result<(u64, Option<u32>), String> {
-        let sftp = self.session.sftp()
-            .map_err(|e| format!("SFTP subsystem failed: {}", e))?;
-        let stat = sftp.stat(Path::new(path))
-            .map_err(|e| format!("SFTP stat failed: {}", e))?;
-        Ok((stat.size.unwrap_or(0), stat.perm))
     }
 
     pub fn disconnect(self) -> Result<(), String> {

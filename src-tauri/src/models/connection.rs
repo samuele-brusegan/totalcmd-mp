@@ -16,6 +16,13 @@ pub struct Connection {
     pub key_path: Option<String>,
     pub use_passive: bool,
     pub use_ftps: bool,
+    #[serde(default)]
+    pub allow_invalid_certs: bool,
+    /// SHA-256 fingerprint (hex with `:` separators) of the only certificate
+    /// that should be accepted. When set, takes precedence over
+    /// `allow_invalid_certs`.
+    #[serde(default)]
+    pub pinned_cert_sha256: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -23,37 +30,6 @@ pub struct Connection {
 pub enum Protocol {
     Ftp,
     Sftp,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct TransferItem {
-    pub id: String,
-    pub source_path: String,
-    pub dest_path: String,
-    pub file_name: String,
-    pub size: u64,
-    pub transferred: u64,
-    pub status: TransferStatus,
-    pub direction: TransferDirection,
-    pub connection_id: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "lowercase")]
-pub enum TransferStatus {
-    Queued,
-    InProgress,
-    Completed,
-    Failed,
-    Paused,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "lowercase")]
-pub enum TransferDirection {
-    Upload,
-    Download,
 }
 
 impl Default for Connection {
@@ -71,6 +47,8 @@ impl Default for Connection {
             key_path: None,
             use_passive: true,
             use_ftps: false,
+            allow_invalid_certs: false,
+            pinned_cert_sha256: None,
         }
     }
 }

@@ -285,7 +285,7 @@ export const usePanelStore = create<PanelStore>((set, get) => ({
   openRemoteTab: (side, connectionId, label, remotePath) => {
     const newTab: PanelTab = {
       id: crypto.randomUUID(),
-      label: `[${label}]`,
+      label,
       currentPath: remotePath,
       files: [],
       selectedFiles: new Set(),

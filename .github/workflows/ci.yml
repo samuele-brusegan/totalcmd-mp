@@ -2,97 +2,60 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, master]
   pull_request:
-    branches: [main]
-
-env:
-  CARGO_TERM_COLOR: always
+    branches: [main, master]
 
 jobs:
-  lint-frontend:
-    name: Lint & Typecheck (Frontend)
+  # Fast frontend-only checks: lint + typecheck. Runs on every push.
+  frontend:
+    name: frontend (lint + typecheck)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 9
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: npx tsc --noEmit
-      - run: npx eslint src/
+          cache: npm
+      - run: npm ci
+      - name: typecheck
+        run: npx tsc -b
+      - name: lint
+        run: npx eslint src
 
-  check-backend:
-    name: Cargo Check (Backend)
+  # Rust check on Linux only — much faster than building everything per OS.
+  # The bundled build for all OSes happens only on tag in release.yml.
+  rust:
+    name: rust (check + clippy)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Install Linux build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libssl-dev \
+            libxdo-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            pkg-config
+
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libssl-dev libdbus-1-dev
-      - name: Cargo check
+          shared-key: ci
+
+      - name: cargo check
         working-directory: src-tauri
-        run: cargo check
+        run: cargo check --locked --all-targets
 
-  build:
-    name: Build (${{ matrix.platform }})
-    needs: [lint-frontend, check-backend]
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - platform: ubuntu-latest
-            target: linux
-          - platform: macos-latest
-            target: macos
-          - platform: windows-latest
-            target: windows
-    runs-on: ${{ matrix.platform }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 9
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: pnpm
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: src-tauri
-
-      - name: Install Linux dependencies
-        if: matrix.platform == 'ubuntu-latest'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libssl-dev libdbus-1-dev
-
-      - run: pnpm install --frozen-lockfile
-
-      - name: Build Tauri app
-        uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tauriScript: pnpm tauri
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: totalcmd-mp-${{ matrix.target }}
-          path: |
-            src-tauri/target/release/bundle/**/*.deb
-            src-tauri/target/release/bundle/**/*.AppImage
-            src-tauri/target/release/bundle/**/*.dmg
-            src-tauri/target/release/bundle/**/*.exe
-            src-tauri/target/release/bundle/**/*.msi
+      - name: clippy
+        working-directory: src-tauri
+        run: cargo clippy --locked --all-targets -- -D warnings
+        continue-on-error: true # don't gate yet, just surface findings

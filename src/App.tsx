@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { Panel as ResizablePanel, Group as PanelGroup, Separator as PanelResizeHandle } from 'react-resizable-panels';
+import { TitleBar } from './components/layout/TitleBar';
 import { MenuBar } from './components/layout/MenuBar';
 import { Toolbar } from './components/layout/Toolbar';
 import { FunctionKeyBar } from './components/layout/FunctionKeyBar';
@@ -19,9 +20,11 @@ import { SettingsDialog } from './components/dialogs/SettingsDialog';
 import { HelpDialog } from './components/dialogs/HelpDialog';
 import { MultiRenameDialog } from './components/dialogs/MultiRenameDialog';
 import { DirCompareDialog } from './components/dialogs/DirCompareDialog';
-import { TransferPanel } from './components/layout/TransferPanel';
+import { TransferProgress } from './components/transfer/TransferProgress';
+import { GitPanel } from './components/git/GitPanel';
 import { usePanelStore } from './stores/panelStore';
 import { useUIStore } from './stores/uiStore';
+import { useGitStore } from './stores/gitStore';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 
 function DialogManager() {
@@ -63,6 +66,12 @@ function DialogManager() {
 
 export default function App() {
   const initializePanels = usePanelStore((s) => s.initializePanels);
+  const activeSide = usePanelStore((s) => s.activeSide);
+  const leftTab = usePanelStore((s) => s.left.tabs[s.left.activeTabIndex]);
+  const rightTab = usePanelStore((s) => s.right.tabs[s.right.activeTabIndex]);
+  const fullscreen = useUIStore((s) => s.fullscreen);
+  const gitPanelOpen = useGitStore((s) => s.panelOpen);
+  const setGitCwd = useGitStore((s) => s.setCwd);
 
   useKeyboardShortcuts();
 
@@ -70,26 +79,50 @@ export default function App() {
     initializePanels();
   }, [initializePanels]);
 
+  // Sync git store with active panel cwd (only for local tabs)
+  useEffect(() => {
+    const tab = activeSide === 'left' ? leftTab : rightTab;
+    if (tab && !tab.isRemote) {
+      setGitCwd(tab.currentPath);
+    } else {
+      setGitCwd(null);
+    }
+  }, [activeSide, leftTab, rightTab, setGitCwd]);
+
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden">
+      {!fullscreen && <TitleBar />}
       <MenuBar />
       <Toolbar />
 
       <div className="flex-1 min-h-0">
-        <PanelGroup orientation="horizontal" className="h-full">
-          <ResizablePanel defaultSize={50} minSize={20}>
-            <Panel side="left" />
+        <PanelGroup orientation="vertical" className="h-full">
+          <ResizablePanel defaultSize={gitPanelOpen ? 65 : 100} minSize={20}>
+            <PanelGroup orientation="horizontal" className="h-full">
+              <ResizablePanel defaultSize={50} minSize={20}>
+                <Panel side="left" />
+              </ResizablePanel>
+
+              <PanelResizeHandle className="w-1 bg-[var(--color-border)] hover:bg-[var(--color-accent)] transition-colors cursor-col-resize" />
+
+              <ResizablePanel defaultSize={50} minSize={20}>
+                <Panel side="right" />
+              </ResizablePanel>
+            </PanelGroup>
           </ResizablePanel>
 
-          <PanelResizeHandle className="w-1 bg-[var(--color-border)] hover:bg-[var(--color-accent)] transition-colors cursor-col-resize" />
-
-          <ResizablePanel defaultSize={50} minSize={20}>
-            <Panel side="right" />
-          </ResizablePanel>
+          {gitPanelOpen && (
+            <>
+              <PanelResizeHandle className="h-1 bg-[var(--color-border)] hover:bg-[var(--color-accent)] transition-colors cursor-row-resize" />
+              <ResizablePanel defaultSize={35} minSize={15}>
+                <GitPanel />
+              </ResizablePanel>
+            </>
+          )}
         </PanelGroup>
       </div>
 
-      <TransferPanel />
+      <TransferProgress />
       <StatusBar />
       <FunctionKeyBar />
 

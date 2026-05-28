@@ -62,13 +62,13 @@ export function Toolbar() {
     },
     {
       icon: Search,
-      label: 'Search (Ctrl+F)',
+      label: 'Search (Ctrl+Shift+F)',
       action: () => openDialog('search'),
       disabled: false,
     },
     {
       icon: Globe,
-      label: 'FTP/SFTP (Ctrl+P)',
+      label: 'FTP/SFTP (Ctrl+F)',
       action: () => openDialog('connection-manager'),
       disabled: false,
     },

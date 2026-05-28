@@ -7,17 +7,20 @@ interface UIStore {
   theme: Theme;
   activeDialog: DialogType;
   dialogData: Record<string, unknown>;
+  fullscreen: boolean;
 
   setTheme: (theme: Theme) => void;
   toggleTheme: () => void;
   openDialog: (dialog: DialogType, data?: Record<string, unknown>) => void;
   closeDialog: () => void;
+  toggleFullscreen: () => Promise<void>;
 }
 
-export const useUIStore = create<UIStore>((set) => ({
+export const useUIStore = create<UIStore>((set, get) => ({
   theme: 'dark',
   activeDialog: null,
   dialogData: {},
+  fullscreen: false,
 
   setTheme: (theme) => set({ theme }),
   toggleTheme: () =>
@@ -25,4 +28,14 @@ export const useUIStore = create<UIStore>((set) => ({
   openDialog: (dialog, data = {}) =>
     set({ activeDialog: dialog, dialogData: data }),
   closeDialog: () => set({ activeDialog: null, dialogData: {} }),
+  toggleFullscreen: async () => {
+    const next = !get().fullscreen;
+    try {
+      const { getCurrentWindow } = await import('@tauri-apps/api/window');
+      await getCurrentWindow().setFullscreen(next);
+    } catch {
+      // Non-Tauri / fallback: ignore
+    }
+    set({ fullscreen: next });
+  },
 }));

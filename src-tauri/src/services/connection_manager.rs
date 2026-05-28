@@ -1,4 +1,5 @@
 use crate::models::Connection;
+use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -77,32 +78,87 @@ pub fn get_connection(id: &str) -> Result<Connection, String> {
         .ok_or_else(|| format!("Connection not found: {}", id))
 }
 
+const KEYRING_SERVICE: &str = "totalcmd-mp";
+
+/// Path to the fallback password store. Used when the OS keychain
+/// (Secret Service / Keychain / Credential Manager) is unavailable, which is
+/// common on headless Linux or systems without gnome-keyring/KWallet running.
+fn passwords_file() -> PathBuf {
+    let dir = dirs::config_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("totalcmd-mp");
+    fs::create_dir_all(&dir).ok();
+    dir.join("passwords.json")
+}
+
+fn read_password_file() -> HashMap<String, String> {
+    fs::read_to_string(passwords_file())
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default()
+}
+
+fn write_password_file(map: &HashMap<String, String>) -> Result<(), String> {
+    let path = passwords_file();
+    let data = serde_json::to_string(map)
+        .map_err(|e| format!("Failed to serialize passwords: {}", e))?;
+    fs::write(&path, data).map_err(|e| format!("Failed to write passwords: {}", e))?;
+    // Restrict permissions: owner read/write only.
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = fs::set_permissions(&path, fs::Permissions::from_mode(0o600));
+    }
+    Ok(())
+}
+
+fn try_keyring_set(connection_id: &str, password: &str) -> bool {
+    keyring::Entry::new(KEYRING_SERVICE, connection_id)
+        .and_then(|e| e.set_password(password))
+        .is_ok()
+}
+
+fn try_keyring_get(connection_id: &str) -> Option<String> {
+    let entry = keyring::Entry::new(KEYRING_SERVICE, connection_id).ok()?;
+    match entry.get_password() {
+        Ok(pw) => Some(pw),
+        Err(_) => None,
+    }
+}
+
+fn try_keyring_delete(connection_id: &str) {
+    if let Ok(entry) = keyring::Entry::new(KEYRING_SERVICE, connection_id) {
+        let _ = entry.delete_credential();
+    }
+}
+
 pub fn store_password(connection_id: &str, password: &str) -> Result<(), String> {
-    let service = "totalcmd-mp";
-    let entry = keyring::Entry::new(service, connection_id)
-        .map_err(|e| format!("Keyring entry failed: {}", e))?;
-    entry.set_password(password)
-        .map_err(|e| format!("Keyring store failed: {}", e))
+    // Prefer the OS keychain; fall back to file storage if unavailable.
+    if try_keyring_set(connection_id, password) {
+        // Remove any stale file entry to keep keychain as the single source.
+        let mut map = read_password_file();
+        if map.remove(connection_id).is_some() {
+            let _ = write_password_file(&map);
+        }
+        return Ok(());
+    }
+    let mut map = read_password_file();
+    map.insert(connection_id.to_string(), password.to_string());
+    write_password_file(&map)
 }
 
 pub fn get_password(connection_id: &str) -> Result<Option<String>, String> {
-    let service = "totalcmd-mp";
-    let entry = keyring::Entry::new(service, connection_id)
-        .map_err(|e| format!("Keyring entry failed: {}", e))?;
-    match entry.get_password() {
-        Ok(pw) => Ok(Some(pw)),
-        Err(keyring::Error::NoEntry) => Ok(None),
-        Err(e) => Err(format!("Keyring get failed: {}", e)),
+    if let Some(pw) = try_keyring_get(connection_id) {
+        return Ok(Some(pw));
     }
+    Ok(read_password_file().get(connection_id).cloned())
 }
 
 pub fn delete_password(connection_id: &str) -> Result<(), String> {
-    let service = "totalcmd-mp";
-    let entry = keyring::Entry::new(service, connection_id)
-        .map_err(|e| format!("Keyring entry failed: {}", e))?;
-    match entry.delete_credential() {
-        Ok(()) => Ok(()),
-        Err(keyring::Error::NoEntry) => Ok(()),
-        Err(e) => Err(format!("Keyring delete failed: {}", e)),
+    try_keyring_delete(connection_id);
+    let mut map = read_password_file();
+    if map.remove(connection_id).is_some() {
+        write_password_file(&map)?;
     }
+    Ok(())
 }

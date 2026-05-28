@@ -10,7 +10,9 @@ pub fn get_connections() -> Result<Vec<Connection>, String> {
 pub fn save_connection(connection: Connection) -> Result<Connection, String> {
     if let Some(ref password) = connection.password {
         if !password.is_empty() {
-            connection_manager::store_password(&connection.id, password).ok();
+            // Surface errors so silent failures (e.g. unwritable config dir)
+            // don't go unnoticed.
+            connection_manager::store_password(&connection.id, password)?;
         }
     }
     connection_manager::add_connection(connection)
@@ -20,7 +22,7 @@ pub fn save_connection(connection: Connection) -> Result<Connection, String> {
 pub fn update_connection(connection: Connection) -> Result<(), String> {
     if let Some(ref password) = connection.password {
         if !password.is_empty() {
-            connection_manager::store_password(&connection.id, password).ok();
+            connection_manager::store_password(&connection.id, password)?;
         }
     }
     connection_manager::update_connection(connection)
@@ -28,6 +30,6 @@ pub fn update_connection(connection: Connection) -> Result<(), String> {
 
 #[tauri::command]
 pub fn delete_connection(id: String) -> Result<(), String> {
-    connection_manager::delete_password(&id).ok();
+    let _ = connection_manager::delete_password(&id);
     connection_manager::delete_connection(&id)
 }

@@ -29,7 +29,7 @@ export function MenuBar() {
         { label: 'Close Tab', shortcut: 'Ctrl+W', action: () => usePanelStore.getState().closeTab(activeSide, usePanelStore.getState()[activeSide].activeTabIndex) },
         { label: 'Refresh', shortcut: 'F2', action: () => refreshPanel(activeSide), separator: true },
         { label: 'Quick Connect...', shortcut: 'Ctrl+Q', action: () => openDialog('quick-connect') },
-        { label: 'Connection Manager...', shortcut: 'Ctrl+P', action: () => openDialog('connection-manager') },
+        { label: 'Connection Manager...', shortcut: 'Ctrl+F', action: () => openDialog('connection-manager') },
       ],
     },
     {
@@ -38,7 +38,7 @@ export function MenuBar() {
         { label: 'Select All', shortcut: 'Ctrl+A', action: () => usePanelStore.getState().selectAll(activeSide) },
         { label: 'Invert Selection', shortcut: 'Num *', action: () => usePanelStore.getState().invertSelection(activeSide) },
         { label: 'Quick Filter', shortcut: 'Ctrl+S', action: () => openDialog('quick-filter'), separator: true },
-        { label: 'Search Files...', shortcut: 'Ctrl+F', action: () => openDialog('search') },
+        { label: 'Search Files...', shortcut: 'Ctrl+Shift+F', action: () => openDialog('search') },
         { label: 'Multi-Rename...', shortcut: 'Ctrl+M', action: () => {
           const paths = getSelectedPaths(activeSide);
           if (paths.length > 0) openDialog('multi-rename', { paths });

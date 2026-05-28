@@ -2,7 +2,7 @@ import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { Folder, File, FileArchive, Link2, Loader2 } from 'lucide-react';
 import { usePanelStore } from '../../stores/panelStore';
 import { formatFileSize, formatDate, getFileTypeClass } from '../../utils/formatters';
-import { copyItems } from '../../services/localFs';
+import { copyAcrossPanels } from '../../services/transfer';
 import type { PanelSide, FileEntry } from '../../types';
 
 interface FileListProps {
@@ -33,6 +33,10 @@ export function FileList({ side }: FileListProps) {
   const listRef = useRef<HTMLDivElement>(null);
   const isActive = activeSide === side;
   const [dragOver, setDragOver] = useState(false);
+  const quickSearchRef = useRef<{ buffer: string; timer: ReturnType<typeof setTimeout> | null }>({
+    buffer: '',
+    timer: null,
+  });
 
   const filteredFiles = useMemo(() => {
     if (!tab) return [];
@@ -78,11 +82,11 @@ export function FileList({ side }: FileListProps) {
           break;
         case 'ArrowUp':
           e.preventDefault();
-          setCursorIndex(side, Math.max(tab.cursorIndex - 1, 0));
+          setCursorIndex(side, Math.max(tab.cursorIndex - 1, -1));
           break;
         case 'Home':
           e.preventDefault();
-          setCursorIndex(side, 0);
+          setCursorIndex(side, -1);
           break;
         case 'End':
           e.preventDefault();
@@ -94,9 +98,13 @@ export function FileList({ side }: FileListProps) {
           break;
         case 'PageUp':
           e.preventDefault();
-          setCursorIndex(side, Math.max(tab.cursorIndex - 20, 0));
+          setCursorIndex(side, Math.max(tab.cursorIndex - 20, -1));
           break;
         case 'Enter': {
+          if (tab.cursorIndex === -1) {
+            navigateUp(side);
+            break;
+          }
           const file = filteredFiles[tab.cursorIndex];
           if (file?.isDirectory) {
             loadDirectory(side, file.path);
@@ -108,25 +116,83 @@ export function FileList({ side }: FileListProps) {
           navigateUp(side);
           break;
         case ' ':
-          e.preventDefault();
-          {
-            const file = filteredFiles[tab.cursorIndex];
-            if (file) {
-              toggleFileSelection(side, file.path);
-              setCursorIndex(side, Math.min(tab.cursorIndex + 1, filteredFiles.length - 1));
-            }
-          }
-          break;
         case 'Insert':
           e.preventDefault();
           {
             const file = filteredFiles[tab.cursorIndex];
             if (file) {
+              // Advance only when selecting (not when deselecting), so the
+              // user can quickly clear a wrong selection without losing
+              // their place in the list.
+              const wasSelected = tab.selectedFiles.has(file.path);
               toggleFileSelection(side, file.path);
-              setCursorIndex(side, Math.min(tab.cursorIndex + 1, filteredFiles.length - 1));
+              if (!wasSelected) {
+                setCursorIndex(
+                  side,
+                  Math.min(tab.cursorIndex + 1, filteredFiles.length - 1)
+                );
+              }
             }
           }
           break;
+        default: {
+          // Quick search: typing printable chars jumps to matching file/dir.
+          // Single key presses cycle through matches; consecutive keys build up a prefix buffer.
+          if (
+            e.key.length === 1 &&
+            !e.ctrlKey &&
+            !e.altKey &&
+            !e.metaKey &&
+            /^[\w.\- ]$/i.test(e.key)
+          ) {
+            e.preventDefault();
+            e.stopPropagation();
+
+            const ch = e.key.toLowerCase();
+            const qs = quickSearchRef.current;
+            if (qs.timer) clearTimeout(qs.timer);
+
+            let buffer = qs.buffer + ch;
+
+            // Special case: ".." moves cursor onto the parent (..) entry
+            if (buffer === '..') {
+              setCursorIndex(side, -1);
+              qs.buffer = '';
+              qs.timer = null;
+              break;
+            }
+            const matches = (name: string) => name.toLowerCase().startsWith(buffer);
+            let matchIdx = filteredFiles.findIndex((f) => matches(f.name));
+
+            // If appending the new char yields no match, restart buffer with just this char
+            if (matchIdx === -1 && buffer.length > 1) {
+              buffer = ch;
+              matchIdx = filteredFiles.findIndex((f) => f.name.toLowerCase().startsWith(buffer));
+            }
+
+            // If buffer is a single char and cursor already on a match, cycle to next match
+            if (buffer.length === 1) {
+              const cursorFile = filteredFiles[tab.cursorIndex];
+              if (cursorFile && cursorFile.name.toLowerCase().startsWith(buffer)) {
+                const next = filteredFiles.findIndex(
+                  (f, i) => i > tab.cursorIndex && f.name.toLowerCase().startsWith(buffer)
+                );
+                matchIdx = next !== -1 ? next : matchIdx;
+              }
+            }
+
+            if (matchIdx !== -1) {
+              setCursorIndex(side, matchIdx);
+            }
+
+            qs.buffer = buffer;
+            qs.timer = setTimeout(() => {
+              qs.buffer = '';
+              qs.timer = null;
+            }, 1000);
+          }
+          break;
+        }
       }
     },
     [tab, isActive, side, filteredFiles, setCursorIndex, loadDirectory, navigateUp, toggleFileSelection]
@@ -175,10 +241,18 @@ export function FileList({ side }: FileListProps) {
       try {
         const { paths, sourceSide } = JSON.parse(data) as { paths: string[]; sourceSide: PanelSide };
         if (sourceSide === side) return;
-        await copyItems(paths, tab.currentPath);
+        const sourceTab = usePanelStore.getState().getActiveTab(sourceSide);
+        if (!sourceTab) return;
+        await copyAcrossPanels({
+          sourceTab,
+          sourcePaths: paths,
+          destTab: tab,
+          destDir: tab.currentPath,
+        });
         await refreshPanel(side);
       } catch (err) {
         console.error('Drop copy failed:', err);
+        alert(`Drop copy failed: ${err}`);
       }
     },
     [tab, side, refreshPanel]
@@ -215,7 +289,16 @@ export function FileList({ side }: FileListProps) {
     >
       {/* Parent directory entry */}
       <div
-        className="flex items-center h-6 px-2 cursor-pointer hover:bg-[var(--color-bg-hover)] text-[var(--color-dir)]"
+        data-index={-1}
+        onClick={() => {
+          if (!isActive) setActiveSide(side);
+          setCursorIndex(side, -1);
+        }}
+        className={`flex items-center h-6 px-2 cursor-pointer text-[var(--color-dir)] ${
+          tab.cursorIndex === -1 && isActive
+            ? 'bg-[var(--color-bg-selected)]'
+            : 'hover:bg-[var(--color-bg-hover)]'
+        }`}
         onDoubleClick={() => navigateUp(side)}
       >
         <div className="w-5 flex-shrink-0">

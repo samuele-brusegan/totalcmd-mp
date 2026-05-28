@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Connection, TransferItem } from '../types';
+import type { Connection } from '../types';
 import {
   getConnections,
   saveConnection as saveConn,
@@ -9,23 +9,16 @@ import {
 
 interface ConnectionStore {
   connections: Connection[];
-  transfers: TransferItem[];
   loading: boolean;
 
   loadConnections: () => Promise<void>;
   addConnection: (conn: Connection) => Promise<Connection>;
   editConnection: (conn: Connection) => Promise<void>;
   removeConnection: (id: string) => Promise<void>;
-
-  addTransfer: (item: TransferItem) => void;
-  updateTransfer: (id: string, updates: Partial<TransferItem>) => void;
-  removeTransfer: (id: string) => void;
-  clearCompleted: () => void;
 }
 
 export const useConnectionStore = create<ConnectionStore>((set) => ({
   connections: [],
-  transfers: [],
   loading: false,
 
   loadConnections: async () => {
@@ -56,28 +49,6 @@ export const useConnectionStore = create<ConnectionStore>((set) => ({
     await deleteConn(id);
     set((s) => ({
       connections: s.connections.filter((c) => c.id !== id),
-    }));
-  },
-
-  addTransfer: (item: TransferItem) => {
-    set((s) => ({ transfers: [...s.transfers, item] }));
-  },
-
-  updateTransfer: (id: string, updates: Partial<TransferItem>) => {
-    set((s) => ({
-      transfers: s.transfers.map((t) =>
-        t.id === id ? { ...t, ...updates } : t
-      ),
-    }));
-  },
-
-  removeTransfer: (id: string) => {
-    set((s) => ({ transfers: s.transfers.filter((t) => t.id !== id) }));
-  },
-
-  clearCompleted: () => {
-    set((s) => ({
-      transfers: s.transfers.filter((t) => t.status !== 'completed'),
     }));
   },
 }));

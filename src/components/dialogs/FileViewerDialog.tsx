@@ -1,12 +1,15 @@
 import { useState, useEffect, useMemo } from 'react';
-import { X, FileText, Binary, Image } from 'lucide-react';
+import { X, FileText, Binary, Image, BookOpen } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { useUIStore } from '../../stores/uiStore';
 import { readFileText } from '../../services/localFs';
 import { convertFileSrc } from '@tauri-apps/api/core';
 
-type ViewMode = 'text' | 'hex' | 'image';
+type ViewMode = 'text' | 'hex' | 'image' | 'markdown';
 
 const IMAGE_EXTS = new Set(['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp', 'svg', 'ico', 'tiff', 'tif']);
+const MARKDOWN_EXTS = new Set(['md', 'markdown', 'mdown', 'mkd']);
 
 function getExtension(path: string): string {
   const dot = path.lastIndexOf('.');
@@ -20,12 +23,15 @@ export function FileViewerDialog() {
 
   const ext = getExtension(filePath || '');
   const isImage = IMAGE_EXTS.has(ext);
+  const isMarkdown = MARKDOWN_EXTS.has(ext);
 
   const needsLoad = Boolean(filePath) && !isImage;
   const [content, setContent] = useState<string>('');
   const [loading, setLoading] = useState(needsLoad);
   const [error, setError] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<ViewMode>(isImage ? 'image' : 'text');
+  const [viewMode, setViewMode] = useState<ViewMode>(
+    isImage ? 'image' : isMarkdown ? 'markdown' : 'text'
+  );
   const [wrapLines, setWrapLines] = useState(false);
 
   useEffect(() => {
@@ -58,7 +64,10 @@ export function FileViewerDialog() {
     return () => window.removeEventListener('keydown', handleKey);
   }, [closeDialog]);
 
-  const fileName = filePath?.split('/').pop() || '';
+  const fileName =
+    (dialogData.displayName as string | undefined) ||
+    filePath?.split('/').pop() ||
+    '';
 
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
@@ -74,10 +83,19 @@ export function FileViewerDialog() {
             </span>
           </div>
           <div className="flex items-center gap-2">
+            {isMarkdown && (
+              <button
+                onClick={() => setViewMode('markdown')}
+                className={`p-1 rounded text-xs ${viewMode === 'markdown' ? 'bg-[var(--color-accent)]/20 text-[var(--color-accent)]' : 'text-[var(--color-text-muted)] hover:bg-[var(--color-bg-hover)]'}`}
+                title="Rendered Markdown"
+              >
+                <BookOpen size={12} />
+              </button>
+            )}
             <button
               onClick={() => setViewMode('text')}
               className={`p-1 rounded text-xs ${viewMode === 'text' ? 'bg-[var(--color-accent)]/20 text-[var(--color-accent)]' : 'text-[var(--color-text-muted)] hover:bg-[var(--color-bg-hover)]'}`}
-              title="Text view"
+              title="Text / source view"
             >
               <FileText size={12} />
             </button>
@@ -127,6 +145,9 @@ export function FileViewerDialog() {
           )}
           {!loading && !error && viewMode === 'text' && (
             <SyntaxView content={content} ext={ext} wrapLines={wrapLines} />
+          )}
+          {!loading && !error && viewMode === 'markdown' && (
+            <MarkdownView content={content} />
           )}
           {!loading && !error && viewMode === 'hex' && (
             <HexView content={content} />
@@ -327,5 +348,107 @@ function HexView({ content }: { content: string }) {
       {lines.join('\n')}
       {bytes.length > 65536 && '\n\n... (truncated at 64KB)'}
     </pre>
+  );
+}
+
+function MarkdownView({ content }: { content: string }) {
+  return (
+    <div className="markdown-body px-8 py-6 max-w-[900px] mx-auto text-[var(--color-text-primary)]">
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{
+          h1: ({ children }) => (
+            <h1 className="text-2xl font-bold mt-6 mb-3 pb-1 border-b border-[var(--color-border)]">
+              {children}
+            </h1>
+          ),
+          h2: ({ children }) => (
+            <h2 className="text-xl font-bold mt-5 mb-2 pb-1 border-b border-[var(--color-border)]/60">
+              {children}
+            </h2>
+          ),
+          h3: ({ children }) => <h3 className="text-lg font-semibold mt-4 mb-2">{children}</h3>,
+          h4: ({ children }) => <h4 className="text-base font-semibold mt-3 mb-1">{children}</h4>,
+          h5: ({ children }) => <h5 className="text-sm font-semibold mt-3 mb-1">{children}</h5>,
+          h6: ({ children }) => (
+            <h6 className="text-sm font-semibold mt-3 mb-1 text-[var(--color-text-secondary)]">
+              {children}
+            </h6>
+          ),
+          p: ({ children }) => <p className="my-2 leading-6 text-sm">{children}</p>,
+          a: ({ href, children }) => (
+            <a
+              href={href}
+              target="_blank"
+              rel="noreferrer"
+              className="text-[var(--color-accent)] hover:underline"
+            >
+              {children}
+            </a>
+          ),
+          ul: ({ children }) => <ul className="list-disc pl-6 my-2 text-sm space-y-1">{children}</ul>,
+          ol: ({ children }) => <ol className="list-decimal pl-6 my-2 text-sm space-y-1">{children}</ol>,
+          li: ({ children }) => <li className="leading-6">{children}</li>,
+          blockquote: ({ children }) => (
+            <blockquote className="border-l-4 border-[var(--color-accent)]/50 pl-4 my-3 text-[var(--color-text-secondary)] italic">
+              {children}
+            </blockquote>
+          ),
+          hr: () => <hr className="my-4 border-[var(--color-border)]" />,
+          code: ({ className, children, ...props }) => {
+            const isBlock = /language-/.test(className || '');
+            if (isBlock) {
+              return (
+                <code className={`${className} block`} {...props}>
+                  {children}
+                </code>
+              );
+            }
+            return (
+              <code
+                className="px-1 py-0.5 rounded bg-[var(--color-bg-tertiary)] text-[var(--color-archive)] text-[0.85em] font-mono"
+                {...props}
+              >
+                {children}
+              </code>
+            );
+          },
+          pre: ({ children }) => (
+            <pre className="bg-[var(--color-bg-tertiary)] border border-[var(--color-border)] rounded p-3 my-3 overflow-x-auto text-xs leading-5 font-mono text-[var(--color-text-primary)]">
+              {children}
+            </pre>
+          ),
+          table: ({ children }) => (
+            <div className="overflow-x-auto my-3">
+              <table className="border-collapse text-sm">{children}</table>
+            </div>
+          ),
+          thead: ({ children }) => <thead className="bg-[var(--color-bg-tertiary)]">{children}</thead>,
+          th: ({ children }) => (
+            <th className="border border-[var(--color-border)] px-3 py-1.5 text-left font-semibold">
+              {children}
+            </th>
+          ),
+          td: ({ children }) => (
+            <td className="border border-[var(--color-border)] px-3 py-1.5">{children}</td>
+          ),
+          img: ({ src, alt }) => (
+            <img src={src} alt={alt} className="max-w-full rounded my-2" />
+          ),
+          input: ({ type, checked, disabled }) =>
+            type === 'checkbox' ? (
+              <input
+                type="checkbox"
+                checked={checked}
+                disabled={disabled}
+                readOnly
+                className="mr-1 align-middle"
+              />
+            ) : null,
+        }}
+      >
+        {content}
+      </ReactMarkdown>
+    </div>
   );
 }

@@ -113,13 +113,13 @@ const NAV_KEYS = [
   { key: 'Ctrl+T', desc: 'New tab' },
   { key: 'Ctrl+W', desc: 'Close tab' },
   { key: 'Ctrl+S', desc: 'Quick filter' },
-  { key: 'Ctrl+F', desc: 'Search files' },
+  { key: 'Ctrl+Shift+F', desc: 'Search files' },
   { key: 'Ctrl+L', desc: 'Focus path bar' },
   { key: 'Alt+F1', desc: 'Drive selector (left)' },
   { key: 'Alt+F2', desc: 'Drive selector (right)' },
 ];
 
 const FTP_KEYS = [
-  { key: 'Ctrl+P', desc: 'Connection manager' },
+  { key: 'Ctrl+F', desc: 'Connection manager' },
   { key: 'Ctrl+Q', desc: 'Quick connect' },
 ];

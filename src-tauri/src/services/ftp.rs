@@ -1,7 +1,29 @@
 use crate::models::{Connection, FileEntry};
+use std::net::{SocketAddr, ToSocketAddrs};
 use std::path::Path;
+use std::time::Duration;
 use suppaftp::types::FileType;
 use suppaftp::{FtpStream, NativeTlsConnector, NativeTlsFtpStream};
+
+const IO_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// Resolve `host:port` and return the addresses sorted with IPv4 first.
+/// On many networks (mobile, ISP without IPv6 routing) the resolver may
+/// return a AAAA record that's unroutable; trying it first leads to
+/// `EADDRNOTAVAIL`. By preferring IPv4 we avoid that hang.
+fn resolve_prefer_v4(host: &str, port: u16) -> Result<Vec<SocketAddr>, String> {
+    let raw: Vec<SocketAddr> = (host, port)
+        .to_socket_addrs()
+        .map_err(|e| format!("DNS resolve failed for {}:{}: {}", host, port, e))?
+        .collect();
+    if raw.is_empty() {
+        return Err(format!("No addresses for {}", host));
+    }
+    let mut sorted: Vec<SocketAddr> =
+        raw.iter().filter(|a| a.is_ipv4()).cloned().collect();
+    sorted.extend(raw.iter().filter(|a| a.is_ipv6()).cloned());
+    Ok(sorted)
+}
 
 enum FtpInner {
     Plain(FtpStream),
@@ -23,15 +45,82 @@ macro_rules! with_stream {
 
 impl FtpClient {
     pub fn connect(conn: &Connection) -> Result<Self, String> {
-        let addr = format!("{}:{}", conn.host, conn.port);
         let password = conn.password.clone().unwrap_or_default();
+        let addrs = resolve_prefer_v4(&conn.host, conn.port)?;
 
         if conn.use_ftps {
-            let stream = NativeTlsFtpStream::connect(&addr)
-                .map_err(|e| format!("FTP connect failed: {}", e))?;
+            let pinned = conn
+                .pinned_cert_sha256
+                .as_deref()
+                .map(normalize_fingerprint);
+
+            // When pinning, probe the cert via a separate TLS handshake first
+            // and compare against the saved fingerprint. Mismatch ⇒ abort
+            // BEFORE the real connection (no credentials sent).
+            if let Some(ref expected) = pinned {
+                let info = crate::commands::tls_inspect::inspect_ftps_certificate(
+                    conn.host.clone(),
+                    conn.port,
+                    Some(conn.port == 990),
+                )?;
+                let actual = normalize_fingerprint(&info.fingerprint_sha256);
+                if &actual != expected {
+                    return Err(format!(
+                        "Pinned certificate mismatch.\n\
+                         Expected: {}\nActual:   {}\n\n\
+                         Il server presenta un certificato diverso da quello \
+                         che hai approvato. Rifiuto la connessione.",
+                        expected, actual
+                    ));
+                }
+            }
+
+            // Try each candidate address in turn (IPv4 first).
+            let stream = {
+                let mut last_err: Option<String> = None;
+                let mut got: Option<NativeTlsFtpStream> = None;
+                for addr in &addrs {
+                    match NativeTlsFtpStream::connect(*addr) {
+                        Ok(s) => {
+                            got = Some(s);
+                            break;
+                        }
+                        Err(e) => {
+                            last_err = Some(format!("{} → {}", addr, e));
+                        }
+                    }
+                }
+                got.ok_or_else(|| {
+                    format!(
+                        "FTP connect failed: {}",
+                        last_err.unwrap_or_else(|| "no candidates".into())
+                    )
+                })?
+            };
+            // Bound any subsequent socket read/write so a stalled data
+            // channel (typical of misconfigured active mode) returns an
+            // error instead of hanging forever.
+            stream
+                .get_ref()
+                .set_read_timeout(Some(IO_TIMEOUT))
+                .map_err(|e| format!("set_read_timeout: {}", e))?;
+            stream
+                .get_ref()
+                .set_write_timeout(Some(IO_TIMEOUT))
+                .map_err(|e| format!("set_write_timeout: {}", e))?;
+            let mut tls_builder = native_tls::TlsConnector::builder();
+            // For pinned and "allow invalid" we skip native verification,
+            // since either we already verified via fingerprint (pin) or the
+            // user explicitly accepted invalid certs.
+            if conn.allow_invalid_certs || pinned.is_some() {
+                tls_builder
+                    .danger_accept_invalid_certs(true)
+                    .danger_accept_invalid_hostnames(true);
+            }
             let tls = NativeTlsConnector::from(
-                native_tls::TlsConnector::new()
-                    .map_err(|e| format!("TLS setup failed: {}", e))?
+                tls_builder
+                    .build()
+                    .map_err(|e| format!("TLS setup failed: {}", e))?,
             );
             let mut stream = stream
                 .into_secure(tls, &conn.host)
@@ -53,8 +142,35 @@ impl FtpClient {
 
             Ok(Self { inner: FtpInner::Tls(stream) })
         } else {
-            let mut stream = FtpStream::connect(&addr)
-                .map_err(|e| format!("FTP connect failed: {}", e))?;
+            let mut stream = {
+                let mut last_err: Option<String> = None;
+                let mut got: Option<FtpStream> = None;
+                for addr in &addrs {
+                    match FtpStream::connect(*addr) {
+                        Ok(s) => {
+                            got = Some(s);
+                            break;
+                        }
+                        Err(e) => {
+                            last_err = Some(format!("{} → {}", addr, e));
+                        }
+                    }
+                }
+                got.ok_or_else(|| {
+                    format!(
+                        "FTP connect failed: {}",
+                        last_err.unwrap_or_else(|| "no candidates".into())
+                    )
+                })?
+            };
+            stream
+                .get_ref()
+                .set_read_timeout(Some(IO_TIMEOUT))
+                .map_err(|e| format!("set_read_timeout: {}", e))?;
+            stream
+                .get_ref()
+                .set_write_timeout(Some(IO_TIMEOUT))
+                .map_err(|e| format!("set_write_timeout: {}", e))?;
 
             stream
                 .login(&conn.username, &password)
@@ -256,3 +372,12 @@ fn parse_dos_list_line(line: &str, parent_path: &str) -> Option<FileEntry> {
         permissions: None,
     })
 }
+
+fn normalize_fingerprint(fp: &str) -> String {
+    fp.chars()
+        .filter(|c| c.is_ascii_hexdigit())
+        .collect::<String>()
+        .to_ascii_uppercase()
+}
+
+

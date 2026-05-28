@@ -1,7 +1,9 @@
 import { useEffect } from 'react';
 import { usePanelStore } from '../stores/panelStore';
 import { useUIStore } from '../stores/uiStore';
-import { copyItems, moveItems, deleteItems } from '../services/localFs';
+import { useGitStore } from '../stores/gitStore';
+import { deleteItems } from '../services/localFs';
+import { copyAcrossPanels, moveAcrossPanels } from '../services/transfer';
 
 export function useKeyboardShortcuts() {
   const toggleActiveSide = usePanelStore((s) => s.toggleActiveSide);
@@ -18,6 +20,8 @@ export function useKeyboardShortcuts() {
   const loadDirectory = usePanelStore((s) => s.loadDirectory);
   const openDialog = useUIStore((s) => s.openDialog);
   const activeDialog = useUIStore((s) => s.activeDialog);
+  const toggleFullscreen = useUIStore((s) => s.toggleFullscreen);
+  const toggleGitPanel = useGitStore((s) => s.togglePanel);
 
   useEffect(() => {
     const handleKeyDown = async (e: KeyboardEvent) => {
@@ -27,6 +31,13 @@ export function useKeyboardShortcuts() {
       if (e.key === 'Tab' && !e.ctrlKey && !e.shiftKey && !e.altKey) {
         e.preventDefault();
         toggleActiveSide();
+        return;
+      }
+
+      // F11 - toggle fullscreen
+      if (e.key === 'F11') {
+        e.preventDefault();
+        toggleFullscreen();
         return;
       }
 
@@ -61,17 +72,17 @@ export function useKeyboardShortcuts() {
         return;
       }
 
-      // Ctrl+F - search files
+      // Ctrl+F - connection manager (Total Commander-style)
       if (e.key === 'f' && e.ctrlKey) {
         e.preventDefault();
-        openDialog('search');
+        openDialog('connection-manager');
         return;
       }
 
-      // Ctrl+P - connection manager
-      if (e.key === 'p' && e.ctrlKey) {
+      // Ctrl+Shift+F - search files (Alt+F7 conflicts with WMs on Linux)
+      if ((e.key === 'F' || e.key === 'f') && e.ctrlKey && e.shiftKey) {
         e.preventDefault();
-        openDialog('connection-manager');
+        openDialog('search');
         return;
       }
 
@@ -79,6 +90,13 @@ export function useKeyboardShortcuts() {
       if (e.key === 'q' && e.ctrlKey) {
         e.preventDefault();
         openDialog('quick-connect');
+        return;
+      }
+
+      // Ctrl+G - toggle git panel
+      if (e.key === 'g' && e.ctrlKey) {
+        e.preventDefault();
+        toggleGitPanel();
         return;
       }
 
@@ -131,7 +149,52 @@ export function useKeyboardShortcuts() {
             if (tab) {
               const file = tab.files[tab.cursorIndex];
               if (file && !file.isDirectory) {
-                openDialog('file-viewer', { path: file.path });
+                if (tab.isRemote && tab.connectionId) {
+                  // Remote: download to temp first, then open viewer.
+                  (async () => {
+                    try {
+                      const { prepareRemoteForEdit } = await import('../services/editor');
+                      const session = await prepareRemoteForEdit(
+                        tab.connectionId!,
+                        file.path
+                      );
+                      openDialog('file-viewer', {
+                        path: session.localPath,
+                        displayName: file.name,
+                      });
+                    } catch (err) {
+                      console.error('Remote view failed:', err);
+                    }
+                  })();
+                } else {
+                  openDialog('file-viewer', { path: file.path });
+                }
+              }
+            }
+          }
+          break;
+
+        case 'F4':
+          e.preventDefault();
+          {
+            const tab = getActiveTab(activeSide);
+            if (tab) {
+              const file = tab.files[tab.cursorIndex];
+              if (file && !file.isDirectory) {
+                (async () => {
+                  try {
+                    const { openEditor } = await import('../services/editorLauncher');
+                    await openEditor({
+                      filePath: file.path,
+                      displayName: file.name,
+                      remote: tab.isRemote && tab.connectionId
+                        ? { connectionId: tab.connectionId, remotePath: file.path }
+                        : undefined,
+                    });
+                  } catch (err) {
+                    console.error('Open editor failed:', err);
+                  }
+                })();
               }
             }
           }
@@ -141,14 +204,21 @@ export function useKeyboardShortcuts() {
           e.preventDefault();
           {
             const sources = getSelectedPaths(activeSide);
+            const sourceTab = getActiveTab(activeSide);
             const otherSide = getOtherSide();
             const destTab = getActiveTab(otherSide);
-            if (sources.length > 0 && destTab) {
+            if (sources.length > 0 && sourceTab && destTab) {
               try {
-                await copyItems(sources, destTab.currentPath);
+                await copyAcrossPanels({
+                  sourceTab,
+                  sourcePaths: sources,
+                  destTab,
+                  destDir: destTab.currentPath,
+                });
                 await refreshPanel(otherSide);
               } catch (err) {
                 console.error('Copy failed:', err);
+                alert(`Copy failed: ${err}`);
               }
             }
           }
@@ -163,11 +233,17 @@ export function useKeyboardShortcuts() {
             }
           } else {
             const sources = getSelectedPaths(activeSide);
+            const sourceTab = getActiveTab(activeSide);
             const otherSide = getOtherSide();
             const destTab = getActiveTab(otherSide);
-            if (sources.length > 0 && destTab) {
+            if (sources.length > 0 && sourceTab && destTab) {
               try {
-                await moveItems(sources, destTab.currentPath);
+                await moveAcrossPanels({
+                  sourceTab,
+                  sourcePaths: sources,
+                  destTab,
+                  destDir: destTab.currentPath,
+                });
                 await Promise.all([refreshPanel(activeSide), refreshPanel(otherSide)]);
               } catch (err) {
                 console.error('Move failed:', err);
@@ -219,5 +295,7 @@ export function useKeyboardShortcuts() {
     getOtherSide,
     refreshPanel,
     openDialog,
+    toggleFullscreen,
+    toggleGitPanel,
   ]);
 }

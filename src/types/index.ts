@@ -41,21 +41,9 @@ export interface Connection {
   keyPath?: string;
   usePassive: boolean;
   useFtps: boolean;
-}
-
-export type TransferStatus = 'queued' | 'inprogress' | 'completed' | 'failed' | 'paused';
-export type TransferDirection = 'upload' | 'download';
-
-export interface TransferItem {
-  id: string;
-  sourcePath: string;
-  destPath: string;
-  fileName: string;
-  size: number;
-  transferred: number;
-  status: TransferStatus;
-  direction: TransferDirection;
-  connectionId: string;
+  allowInvalidCerts?: boolean;
+  /** SHA-256 fingerprint of the only certificate accepted (cert pinning). */
+  pinnedCertSha256?: string | null;
 }
 
 export interface PanelTab {

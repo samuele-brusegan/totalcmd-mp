@@ -47,6 +47,12 @@ pub fn read_file_text(path: String, encoding: Option<String>) -> Result<String, 
 }
 
 #[tauri::command]
+pub fn write_file_text(path: String, content: String) -> Result<(), String> {
+    std::fs::write(&path, content.as_bytes())
+        .map_err(|e| format!("Failed to write file: {}", e))
+}
+
+#[tauri::command]
 pub fn search_files(start_path: String, pattern: String) -> Result<Vec<FileEntry>, String> {
     fs_service::search_files(&start_path, &pattern)
 }

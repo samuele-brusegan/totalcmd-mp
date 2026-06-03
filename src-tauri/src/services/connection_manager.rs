@@ -133,15 +133,28 @@ fn try_keyring_delete(connection_id: &str) {
 }
 
 pub fn store_password(connection_id: &str, password: &str) -> Result<(), String> {
-    // Prefer the OS keychain; fall back to file storage if unavailable.
-    if try_keyring_set(connection_id, password) {
-        // Remove any stale file entry to keep keychain as the single source.
+    // Prefer the OS keychain, but only trust it if the value can actually be
+    // read back. On some Linux setups (locked/session-only collections,
+    // sandboxed/AppImage runtimes, missing Secret Service) `set_password`
+    // reports success yet the secret is gone on the next launch — which made
+    // saved passwords silently disappear after a restart. By verifying the
+    // round-trip we detect those cases and fall back to the file store so the
+    // password always persists.
+    let keyring_reliable =
+        try_keyring_set(connection_id, password) && try_keyring_get(connection_id).as_deref() == Some(password);
+
+    if keyring_reliable {
+        // Keychain holds the secret reliably: it is the single source of
+        // truth, so drop any stale plaintext file entry.
         let mut map = read_password_file();
         if map.remove(connection_id).is_some() {
             let _ = write_password_file(&map);
         }
         return Ok(());
     }
+
+    // Keychain unavailable or not persistent here: keep the password in the
+    // restricted (0600) fallback file so it survives restarts.
     let mut map = read_password_file();
     map.insert(connection_id.to_string(), password.to_string());
     write_password_file(&map)
